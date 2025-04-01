@@ -1,0 +1,65 @@
+#include <sycl/sycl.hpp>
+#include <iostream>
+#include <vector>
+#include <chrono>
+
+void bubble_sort(sycl::queue &q, std::vector<int> &data) {
+    size_t n = data.size();
+    sycl::buffer<int> buf(data.data(), sycl::range<1>(n));
+
+    // Traditional sequential bubble sort
+    for (size_t i = 0; i < n - 1; ++i) {
+        q.submit([&](sycl::handler &h) {
+            auto acc = buf.get_access<sycl::access_mode::read_write>(h);
+            
+            h.single_task([=]() {
+                for (size_t j = 0; j < n - i - 1; j++) {
+                    if (acc[j] > acc[j + 1]) {
+                        int temp = acc[j];
+                        acc[j] = acc[j + 1];
+                        acc[j + 1] = temp;
+                    }
+                }
+            });
+        });
+        q.wait();
+    }
+
+    // Copy data back from device to host
+    auto host_acc = buf.get_host_access();
+    for (size_t i = 0; i < n; ++i) {
+        data[i] = host_acc[i];
+    }
+}
+
+int main() {
+    sycl::queue q;
+    
+    size_t n;
+    std::cout << "Enter the number of elements: ";
+    std::cin >> n;
+    
+    std::vector<int> data(n);
+    std::cout << "Enter " << n << " elements: ";
+    for (size_t i = 0; i < n; ++i) {
+        std::cin >> data[i];
+    }
+    
+    std::cout << "Original array: ";
+    for (int num : data) std::cout << num << " ";
+    std::cout << "\n";
+    
+    auto start = std::chrono::high_resolution_clock::now();
+    bubble_sort(q, data);
+    auto end = std::chrono::high_resolution_clock::now();
+    
+    std::cout << "Sorted array: ";
+    for (int num : data) std::cout << num << " ";
+    std::cout << "\n";
+
+    std::cout << "Execution time: " 
+              << std::chrono::duration_cast<std::chrono::microseconds>(end - start).count() 
+              << " microseconds\n";
+    
+    return 0;
+}
